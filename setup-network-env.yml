@@ -1,0 +1,54 @@
+---
+- name: Setup SecureNetX Network Environment (Ubuntu VM)
+  hosts: all
+  become: yes 
+  tasks:
+
+    - name: 1. Update APT package cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+
+    - name: 2. Install Essential Tools (Git, Python3, SSH for MobaXterm)
+      apt:
+        name:
+          - git
+          - python3
+          - python3-pip
+          - openssh-server
+          - curl
+          - net-tools
+        state: present
+
+
+    - name: 3. Ensure SSH service is running and enabled (For MobaXterm Connection)
+      service:
+        name: ssh
+        state: started
+        enabled: yes
+
+
+    - name: 4. Install SDN & Networking Tools (Mininet, OVS, Wireshark, Tshark)
+      apt:
+        name:
+          - mininet
+          - openvswitch-switch
+          - wireshark
+          - tshark
+          - xauth 
+        state: present
+
+
+    - name: 5. Ensure Open vSwitch service is running
+      service:
+        name: openvswitch-switch
+        state: started
+        enabled: yes
+
+    - name: 6. Install Ryu Controller (via Python PIP)
+      pip:
+        name: ryu
+        executable: pip3
+        break_system_packages: yes 
+
