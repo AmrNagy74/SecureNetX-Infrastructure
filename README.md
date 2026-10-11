@@ -25,3 +25,5 @@ wget [https://raw.githubusercontent.com/AmrNagy74/SecureNetX-Infrastructure/main
 ```bash
 ansible-playbook -i localhost, -c local setup-network-env.yml -K
 ```
+
+[👉 اضغط هنا لفتح دليل تجهيز وتشغيل بيئة التطوير (لأعضاء الفريق)](https://docs.google.com/document/d/1hP0EsHa1-t455KesMlnBS0ZO6rYet5_ESjMbjvWiVkM/edit)
