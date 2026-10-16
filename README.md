@@ -7,7 +7,7 @@
 - Wireshark & Tshark
 - Python3 & Git & SSH
 
-## 🛠️ خطوات التشغيل (لرويعي)
+## 🛠️ خطوات التشغيل والتهيئة (Quick Start Guide)
 
 يرجى تجهيز نسخة Ubuntu وهمية (VM) نظيفة، ثم فتح الـ Terminal وتنفيذ الخطوات التالية بالترتيب:
 
