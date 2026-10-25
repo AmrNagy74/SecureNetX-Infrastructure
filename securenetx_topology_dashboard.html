@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SecureNetX - Airport SDN Traffic Visualizer & SOC Dashboard</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        darkbg: '#050811',
+                        panelbg: '#0c1322',
+                        cardbg: '#101a2e',
+                        borderbg: '#1b2a47'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #04060d;
+            color: #f1f5f9;
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden;
+        }
+
+        .glass-panel {
+            background: rgba(12, 19, 34, 0.88);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.6);
+        }
+
+        /* EMERGENCY STROBE LIGHT ALARM ANIMATION */
+        @keyframes emergency-strobe {
+            0%, 100% {
+                background-color: rgba(225, 29, 72, 0.15);
+                border-color: rgba(225, 29, 72, 0.8);
+                box-shadow: 0 0 35px rgba(225, 29, 72, 0.6);
+            }
+            50% {
+                background-color: rgba(225, 29, 72, 0.35);
+                border-color: rgba(255, 255, 255, 0.9);
+                box-shadow: 0 0 60px rgba(225, 29, 72, 0.9);
+            }
+        }
+
+        .alarm-strobe-active {
+            animation: emergency-strobe 0.8s infinite ease-in-out;
+        }
+
+        /* Pulsing Glow Effects */
+        @keyframes pulse-yellow {
+            0%, 100% { border-color: rgba(245, 158, 11, 0.4); box-shadow: 0 0 15px rgba(245, 158, 11, 0.2); }
+            50% { border-color: rgba(245, 158, 11, 0.9); box-shadow: 0 0 30px rgba(245, 158, 11, 0.6); }
+        }
+
+        .warning-pulse-active {
+            animation: pulse-yellow 1.2s infinite ease-in-out;
+        }
+
+        /* Canvas Overlay Container */
+        .topology-container {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 1200 / 620;
+            background: radial-gradient(circle at center, #0a101f 0%, #04060d 100%);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #060913; }
+        ::-webkit-scrollbar-thumb { background: #1b2a47; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #2c426e; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between">
+
+    <!-- HEADER & NAVIGATION -->
+    <header class="glass-panel sticky top-0 z-50 border-b border-slate-800 px-4 md:px-8 py-3">
+        <div class="max-w-[1800px] mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+            
+            <!-- Logo & Title -->
+            <div class="flex items-center gap-3">
+                <div class="h-11 w-11 rounded-xl bg-gradient-to-tr from-emerald-500 via-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                    <i class="fa-solid fa-shield-halved text-slate-950 text-2xl"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="font-extrabold text-xl tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-100 to-slate-300">
+                            SecureNetX
+                        </h1>
+                        <span class="text-[10px] px-2 py-0.5 rounded-full font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 uppercase tracking-wider">
+                            Live SDN Traffic Visualizer
+                        </span>
+                    </div>
+                    <p class="text-xs text-slate-400">Autonomous Airport Network Defense & Real-Time Flow Telemetry</p>
+                </div>
+            </div>
+
+            <!-- Status Indicator Badges -->
+            <div class="flex flex-wrap items-center gap-3 text-xs font-mono">
+                <!-- Audio Mute Toggle -->
+                <button id="audio-mute-btn" onclick="toggleAudio()" class="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 flex items-center gap-2 transition-all">
+                    <i id="audio-icon" class="fa-solid fa-volume-xmark text-slate-400"></i>
+                    <span id="audio-text">Audio: MUTED</span>
+                </button>
+
+                <!-- Health Status -->
+                <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800">
+                    <span class="relative flex h-2.5 w-2.5">
+                        <span id="ping-dot-pulse" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span id="ping-dot" class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                    </span>
+                    <span class="text-slate-400">System:</span>
+                    <span id="system-status-text" class="text-emerald-400 font-bold">OPERATIONAL</span>
+                </div>
+
+                <!-- OpenFlow Controller -->
+                <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800">
+                    <i class="fa-solid fa-brain text-cyan-400"></i>
+                    <span class="text-slate-400">Ryu SDN:</span>
+                    <span class="text-cyan-400 font-bold">OF 1.3 ACTIVE</span>
+                </div>
+            </div>
+
+            <!-- Controls & Clock -->
+            <div class="flex items-center gap-3">
+                <div class="text-right font-mono hidden xl:block">
+                    <div id="live-clock" class="text-sm font-bold text-slate-200">00:00:00 UTC</div>
+                    <div class="text-[10px] text-slate-500">REAL-TIME TELEMETRY</div>
+                </div>
+                <button onclick="resetSystemState()" class="px-3.5 py-2 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all flex items-center gap-2 shadow-sm">
+                    <i class="fa-solid fa-rotate-right text-emerald-400"></i> Reset
+                </button>
+            </div>
+        </div>
+    </header>
+
+
+    <!-- MAIN DASHBOARD CONTENT -->
+    <main class="max-w-[1800px] mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-5 flex-1 w-full">
+
+        <!-- INTERACTIVE SCENARIO SELECTOR BAR (TOP) -->
+        <div class="lg:col-span-12 glass-panel rounded-2xl p-4 border border-slate-800">
+            <div class="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4">
+                
+                <div class="flex items-center gap-3">
+                    <div class="h-9 w-9 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                        <i class="fa-solid fa-sliders text-lg"></i>
+                    </div>
+                    <div>
+                        <h2 class="font-bold text-sm text-slate-100">Live Simulation Scenario Controls</h2>
+                        <p class="text-xs text-slate-400">Trigger animated packet flows and observe dynamic SDN security enforcement</p>
+                    </div>
+                </div>
+
+                <!-- Scenario Action Buttons -->
+                <div class="grid grid-cols-2 sm:grid-cols-5 gap-2.5 w-full xl:w-auto">
+                    
+                    <!-- 1. Normal State -->
+                    <button onclick="setScenario('normal')" class="px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-emerald-950/50 border border-slate-800 hover:border-emerald-500/50 text-slate-200 text-xs font-semibold transition-all flex items-center justify-center gap-2 group">
+                        <i class="fa-solid fa-circle-play text-emerald-400 group-hover:scale-110 transition-transform"></i>
+                        <span>🟢 Normal Traffic</span>
+                    </button>
+
+                    <!-- 2. Isolation Test -->
+                    <button onclick="setScenario('isolation')" class="px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-purple-950/50 border border-slate-800 hover:border-purple-500/50 text-slate-200 text-xs font-semibold transition-all flex items-center justify-center gap-2 group">
+                        <i class="fa-solid fa-shield-cat text-purple-400 group-hover:scale-110 transition-transform"></i>
+                        <span>⛔ Test Isolation</span>
+                    </button>
+
+                    <!-- 3. Anomaly Warning -->
+                    <button onclick="setScenario('suspicious')" class="px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-amber-950/50 border border-slate-800 hover:border-amber-500/50 text-slate-200 text-xs font-semibold transition-all flex items-center justify-center gap-2 group">
+                        <i class="fa-solid fa-triangle-exclamation text-amber-400 group-hover:scale-110 transition-transform"></i>
+                        <span>🟡 Suspicious Spike</span>
+                    </button>
+
+                    <!-- 4. DoS Attack -->
+                    <button onclick="setScenario('attack')" class="px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-rose-950/50 border border-slate-800 hover:border-rose-500/50 text-slate-200 text-xs font-semibold transition-all flex items-center justify-center gap-2 group">
+                        <i class="fa-solid fa-skull-crossbones text-rose-400 group-hover:scale-110 transition-transform"></i>
+                        <span>🚨 DoS SYN Flood</span>
+                    </button>
+
+                    <!-- 5. AI Auto-Mitigate -->
+                    <button onclick="setScenario('mitigate')" class="px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-cyan-950/50 border border-slate-800 hover:border-cyan-500/50 text-slate-200 text-xs font-semibold transition-all flex items-center justify-center gap-2 group">
+                        <i class="fa-solid fa-robot text-cyan-400 group-hover:scale-110 transition-transform"></i>
+                        <span>🛡️ AI Auto-Block</span>
+                    </button>
+
+                </div>
+
+            </div>
+        </div>
+
+
+        <!-- PROMINENT DYNAMIC ALARM & STATUS BANNER -->
+        <div id="alarm-banner" class="lg:col-span-12 glass-panel rounded-2xl p-4 border border-emerald-500/40 bg-emerald-950/10 transition-all duration-300 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div class="flex items-center gap-4 text-center md:text-left">
+                <div id="alarm-icon-box" class="h-12 w-12 rounded-xl bg-emerald-500/20 border border-emerald-500/50 flex items-center justify-center text-emerald-400 text-2xl shrink-0">
+                    <i class="fa-solid fa-circle-check"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2 justify-center md:justify-start">
+                        <h3 id="alarm-title" class="font-extrabold text-slate-100 text-base uppercase tracking-wide">
+                            SYSTEM STATUS: NORMAL OPERATION
+                        </h3>
+                        <span id="alarm-badge" class="text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 uppercase">
+                            Clean Traffic
+                        </span>
+                    </div>
+                    <p id="alarm-desc" class="text-xs text-slate-300 mt-1 leading-relaxed">
+                        Network telemetry is clean. Guest WiFi users are routed normally to Public DMZ servers, while critical AODB databases remain fully isolated by OpenFlow policy.
+                    </p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-4 font-mono shrink-0">
+                <div class="text-right">
+                    <div class="text-[10px] text-slate-400">PACKET RATE</div>
+                    <div id="banner-pps" class="text-base font-bold text-emerald-400">124 pps</div>
+                </div>
+                <div class="h-8 w-px bg-slate-800"></div>
+                <div class="text-right">
+                    <div class="text-[10px] text-slate-400">THREAT LEVEL</div>
+                    <div id="banner-threat" class="text-base font-bold text-emerald-400">LOW (0%)</div>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- ANIMATED GRAPHICAL NETWORK TOPOLOGY VISUALIZER (SVG + CANVAS OVERLAY) -->
+        <div class="lg:col-span-12 glass-panel rounded-2xl p-2 border border-slate-800 overflow-hidden relative">
+            
+            <div class="topology-container rounded-xl overflow-hidden" id="topology-wrapper">
+                
+                <!-- SVG LAYER FOR STATIC NETWORK TOPOLOGY (NODES, ZONES, CONNECTORS) -->
+                <svg id="topology-svg" viewBox="0 0 1200 620" class="w-full h-full absolute inset-0 z-0">
+                    <defs>
+                        <!-- Glow Filters -->
+                        <filter id="glow-green" x="-20%" y="-20%" width="140%" height="140%">
+                            <feGaussianBlur stdDeviation="4" result="blur" />
+                            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                        </filter>
+                        <filter id="glow-red" x="-20%" y="-20%" width="140%" height="140%">
+                            <feGaussianBlur stdDeviation="6" result="blur" />
+                            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                        </filter>
+
+                        <!-- Cable Gradient Patterns -->
+                        <linearGradient id="link-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#1e293b" />
+                            <stop offset="50%" stop-color="#334155" />
+                            <stop offset="100%" stop-color="#1e293b" />
+                        </linearGradient>
+                    </defs>
+
+                    <!-- TOPOLOGY HEADER OVERLAY -->
+                    <text x="30" y="35" fill="#f8fafc" font-size="14" font-weight="800" font-family="Inter">AIRPORT SDN PHYSICAL & LOGICAL TOPOLOGY (6 ZONES)</text>
+                    <text x="30" y="52" fill="#64748b" font-size="11" font-family="JetBrains Mono">OpenFlow v1.3 Switched Infrastructure | Mininet OVS Emulation</text>
+
+                    <!-- RYU CONTROLLER (CENTRAL BRAIN) -->
+                    <g transform="translate(600, 45)" class="cursor-pointer" onclick="inspectNode('ryu')">
+                        <rect x="-110" y="-25" width="220" height="50" rx="12" fill="#0f172a" stroke="#10b981" stroke-width="2" filter="url(#glow-green)" />
+                        <circle cx="-80" cy="0" r="14" fill="#10b981" opacity="0.2" />
+                        <text x="-80" y="5" text-anchor="middle" fill="#10b981" font-size="14" font-family="FontAwesome">🧠</text>
+                        <text x="0" y="-3" text-anchor="middle" fill="#f8fafc" font-size="13" font-weight="700">Ryu SDN Controller</text>
+                        <text x="0" y="14" text-anchor="middle" fill="#34d399" font-size="10" font-family="JetBrains Mono">REST API: 8080 | Central Brain</text>
+                    </g>
+
+                    <!-- CORE SWITCH s1 (CENTRAL BACKBONE) -->
+                    <g transform="translate(600, 145)" class="cursor-pointer" onclick="inspectNode('s1')">
+                        <rect x="-90" y="-22" width="180" height="44" rx="10" fill="#0f172a" stroke="#06b6d4" stroke-width="2" />
+                        <text x="0" y="-2" text-anchor="middle" fill="#f8fafc" font-size="12" font-weight="700">Core Switch (s1)</text>
+                        <text x="0" y="13" text-anchor="middle" fill="#22d3ee" font-size="10" font-family="JetBrains Mono">DPID: 000000000001</text>
+                    </g>
+
+                    <!-- CONTROLLER TO CORE LINK -->
+                    <line x1="600" y1="70" x2="600" y2="123" stroke="#10b981" stroke-width="2" stroke-dasharray="4 4" />
+
+                    <!-- 6 AIRPORT ZONE BOUNDING BOXES -->
+                    <!-- Zone 1: AODB (Purple) -->
+                    <rect x="20" y="210" width="180" height="250" rx="16" fill="#1e102a" fill-opacity="0.5" stroke="#a855f7" stroke-width="1.5" stroke-dasharray="6 4" />
+                    <text x="32" y="232" fill="#c084fc" font-size="11" font-weight="800">Zone 1: AODB Ops</text>
+                    <text x="32" y="246" fill="#a855f7" font-size="9" font-family="JetBrains Mono">HIGH SECURITY</text>
+
+                    <!-- Zone 2: Admin (Blue) -->
+                    <rect x="215" y="210" width="180" height="250" rx="16" fill="#0f172a" fill-opacity="0.5" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="6 4" />
+                    <text x="227" y="232" fill="#60a5fa" font-size="11" font-weight="800">Zone 2: Check-In/Admin</text>
+                    <text x="227" y="246" fill="#3b82f6" font-size="9" font-family="JetBrains Mono">STAFF ONLY</text>
+
+                    <!-- Zone 3: Baggage (Cyan) -->
+                    <rect x="410" y="210" width="180" height="250" rx="16" fill="#081c24" fill-opacity="0.5" stroke="#06b6d4" stroke-width="1.5" stroke-dasharray="6 4" />
+                    <text x="422" y="232" fill="#22d3ee" font-size="11" font-weight="800">Zone 3: Baggage</text>
+                    <text x="422" y="246" fill="#06b6d4" font-size="9" font-family="JetBrains Mono">INTERNAL OPS</text>
+
+                    <!-- Zone 4: Guest WiFi (Rose/Untrusted) -->
+                    <rect id="svg-zone4" x="605" y="210" width="190" height="250" rx="16" fill="#270d19" fill-opacity="0.5" stroke="#f43f5e" stroke-width="1.5" stroke-dasharray="6 4" />
+                    <text x="617" y="232" fill="#fb7185" font-size="11" font-weight="800">Zone 4: Guest WiFi</text>
+                    <text x="617" y="246" fill="#f43f5e" font-size="9" font-family="JetBrains Mono">UNTRUSTED ZONE</text>
+
+                    <!-- Zone 5: Security/CCTV (Indigo) -->
+                    <rect x="805" y="210" width="180" height="250" rx="16" fill="#14142b" fill-opacity="0.5" stroke="#6366f1" stroke-width="1.5" stroke-dasharray="6 4" />
+                    <text x="817" y="232" fill="#818cf8" font-size="11" font-weight="800">Zone 5: CCTV Security</text>
+                    <text x="817" y="246" fill="#6366f1" font-size="9" font-family="JetBrains Mono">RESTRICTED</text>
+
+                    <!-- Zone 6: DMZ (Amber) -->
+                    <rect x="1000" y="210" width="180" height="250" rx="16" fill="#241a08" fill-opacity="0.5" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="6 4" />
+                    <text x="1012" y="232" fill="#fbbf24" font-size="11" font-weight="800">Zone 6: Public DMZ</text>
+                    <text x="1012" y="246" fill="#f59e0b" font-size="9" font-family="JetBrains Mono">PUBLIC SERVICES</text>
+
+
+                    <!-- CONNECTING CABLE LINES (Core s1 -> Zone Switches) -->
+                    <line x1="600" y1="167" x2="110" y2="275" stroke="#334155" stroke-width="2" />
+                    <line x1="600" y1="167" x2="305" y2="275" stroke="#334155" stroke-width="2" />
+                    <line x1="600" y1="167" x2="500" y2="275" stroke="#334155" stroke-width="2" />
+                    <line x1="600" y1="167" x2="700" y2="275" stroke="#334155" stroke-width="2" />
+                    <line x1="600" y1="167" x2="895" y2="275" stroke="#334155" stroke-width="2" />
+                    <line x1="600" y1="167" x2="1090" y2="275" stroke="#334155" stroke-width="2" />
+
+
+                    <!-- ISOLATION BARRIER SHIELD (Between Core and s2) -->
+                    <g transform="translate(355, 221)">
+                        <circle cx="0" cy="0" r="16" fill="#0f172a" stroke="#f43f5e" stroke-width="2" filter="url(#glow-red)" />
+                        <text x="0" y="4" text-anchor="middle" fill="#f43f5e" font-size="11" font-weight="900">⛔</text>
+                    </g>
+
+
+                    <!-- ZONE SWITCHES & HOST NODES -->
+
+                    <!-- ZONE 1 NODES -->
+                    <g transform="translate(110, 275)" class="cursor-pointer" onclick="inspectNode('s2')">
+                        <rect x="-45" y="-15" width="90" height="30" rx="8" fill="#0f172a" stroke="#a855f7" stroke-width="2" />
+                        <text x="0" y="4" text-anchor="middle" fill="#c084fc" font-size="11" font-weight="700">s2 (AODB)</text>
+                    </g>
+                    <line x1="110" y1="290" x2="65" y2="395" stroke="#334155" stroke-width="1.5" />
+                    <line x1="110" y1="290" x2="155" y2="395" stroke="#334155" stroke-width="1.5" />
+
+                    <g transform="translate(65, 395)" class="cursor-pointer" onclick="inspectNode('h1')">
+                        <circle cx="0" cy="0" r="18" fill="#1e102a" stroke="#a855f7" stroke-width="2" />
+                        <text x="0" y="4" text-anchor="middle" fill="#c084fc" font-size="10" font-weight="800">h1</text>
+                        <text x="0" y="30" text-anchor="middle" fill="#f8fafc" font-size="10" font-weight="600">AODB Server</text>
+                        <text x="0" y="42" text-anchor="middle" fill="#a855f7" font-size="9" font-family="JetBrains Mono">10.0.1.1</text>
+                    </g>
+
+                    <g transform="translate(155, 395)" class="cursor-pointer" onclick="inspectNode('h2')">
+                        <circle cx="0" cy="0" r="18" fill="#1e102a" stroke="#a855f7" stroke-width="1.5" />
+                        <text x="0" y="4" text-anchor="middle" fill="#c084fc" font-size="10" font-weight="800">h2</text>
+                        <text x="0" y="30" text-anchor="middle" fill="#f8fafc" font-size="10">Gate System</text>
+                        <text x="0" y="42" text-anchor="middle" fill="#94a3b8" font-size="9" font-family="JetBrains Mono">10.0.1.2</text>
+                    </g>
+
+
+                    <!-- ZONE 2 NODES -->
+                    <g transform="translate(305, 275)" class="cursor-pointer" onclick="inspectNode('s3')">
+                        <rect x="-45" y="-15" width="90" height="30" rx="8" fill="#0f172a" stroke="#3b82f6" stroke-width="2" />
+                        <text x="0" y="4" text-anchor="middle" fill="#60a5fa" font-size="11" font-weight="700">s3 (Admin)</text>
+                    </g>
+                    <line x1="305" y1="290" x2="260" y2="395" stroke="#334155" stroke-width="1.5" />
+                    <line x1="305" y1="290" x2="350" y2="395" stroke="#334155" stroke-width="1.5" />
+
+                    <g transform="translate(260, 395)" class="cursor-pointer" onclick="inspectNode('h3')">
+                        <circle cx="0" cy="0" r="18" fill="#0f172a" stroke="#3b82f6" stroke-width="1.5" />
+                        <text x="0" y="4" text-anchor="middle" fill="#60a5fa" font-size="10" font-weight="800">h3</text>
+                        <text x="0" y="30" text-anchor="middle" fill="#f8fafc" font-size="10">Check-In</text>
+                        <text x="0" y="42" text-anchor="middle" fill="#94a3b8" font-size="9" font-family="JetBrains Mono">10.0.2.1</text>
+                    </g>
+
+                    <g transform="translate(350, 395)" class="cursor-pointer" onclick="inspectNode('h4')">
+                        <circle cx="0" cy="0" r="18" fill="#0f172a" stroke="#3b82f6" stroke-width="1.5" />
+                        <text x="0" y="4" text-anchor="middle" fill="#60a5fa" font-size="10" font-weight="800">h4</text>
+                        <text x="0" y="30" text-anchor="middle" fill="#f8fafc" font-size="10">Admin PC</text>
+                        <text x="0" y="42" text-anchor="middle" fill="#94a3b8" font-size="9" font-family="JetBrains Mono">10.0.2.2</text>
+                    </g>
+
+
+                    <!-- ZONE 3 NODES -->
+                    <g transform="translate(500, 275)" class="cursor-pointer" onclick="inspectNode('s4')">
+                        <rect x="-45" y="-15" width="90" height="30" rx="8" fill="#0f172a" stroke="#06b6d4" stroke-width="2" />
+                        <text x="0" y="4" text-anchor="middle" fill="#22d3ee" font-size="11" font-weight="700">s4 (Baggage)</text>
+                    </g>
+                    <line x1="500" y1="290" x2="500" y2="395" stroke="#334155" stroke-width="1.5" />
+
+                    <g transform="translate(500, 395)" class="cursor-pointer" onclick="inspectNode('h5')">
+                        <circle cx="0" cy="0" r="18" fill="#081c24" stroke="#06b6d4" stroke-width="1.5" />
+                        <text x="0" y="4" text-anchor="middle" fill="#22d3ee" font-size="10" font-weight="800">h5</text>
+                        <text x="0" y="30" text-anchor="middle" fill="#f8fafc" font-size="10">Luggage Sort</text>
+                        <text x="0" y="42" text-anchor="middle" fill="#94a3b8" font-size="9" font-family="JetBrains Mono">10.0.3.1</text>
+                    </g>
+
+
+                    <!-- ZONE 4 NODES (GUEST / ATTACKER) -->
+                    <g transform="translate(700, 275)" class="cursor-pointer" onclick="inspectNode('s5')">
+                        <rect x="-45" y="-15" width="90" height="30" rx="8" fill="#0f172a" stroke="#f43f5e" stroke-width="2" />
+                        <text x="0" y="4" text-anchor="middle" fill="#fb7185" font-size="11" font-weight="700">s5 (WiFi)</text>
+                    </g>
+                    <line x1="700" y1="290" x2="655" y2="395" stroke="#334155" stroke-width="1.5" />
+                    <line x1="700" y1="290" x2="745" y2="395" stroke="#334155" stroke-width="1.5" />
+
+                    <!-- ATTACKER HOST h6 -->
+                    <g transform="translate(655, 395)" class="cursor-pointer" onclick="inspectNode('h6')">
+                        <circle id="h6-circle" cx="0" cy="0" r="20" fill="#270d19" stroke="#f43f5e" stroke-width="2.5" filter="url(#glow-red)" />
+                        <text x="0" y="4" text-anchor="middle" fill="#fb7185" font-size="11" font-weight="900">h6</text>
+                        <text id="h6-label-title" x="0" y="32" text-anchor="middle" fill="#fb7185" font-size="10" font-weight="800">Guest / Attacker</text>
+                        <text x="0" y="44" text-anchor="middle" fill="#f43f5e" font-size="9" font-family="JetBrains Mono" font-weight="700">10.0.4.1</text>
+                    </g>
+
+                    <g transform="translate(745, 395)" class="cursor-pointer" onclick="inspectNode('h7')">
+                        <circle cx="0" cy="0" r="18" fill="#0f172a" stroke="#f43f5e" stroke-width="1.5" />
+                        <text x="0" y="4" text-anchor="middle" fill="#fb7185" font-size="10" font-weight="800">h7</text>
+                        <text x="0" y="30" text-anchor="middle" fill="#f8fafc" font-size="10">Guest Phone</text>
+                        <text x="0" y="42" text-anchor="middle" fill="#94a3b8" font-size="9" font-family="JetBrains Mono">10.0.4.2</text>
+                    </g>
+
+
+                    <!-- ZONE 5 NODES -->
+                    <g transform="translate(895, 275)" class="cursor-pointer" onclick="inspectNode('s6')">
+                        <rect x="-45" y="-15" width="90" height="30" rx="8" fill="#0f172a" stroke="#6366f1" stroke-width="2" />
+                        <text x="0" y="4" text-anchor="middle" fill="#818cf8" font-size="11" font-weight="700">s6 (CCTV)</text>
+                    </g>
+                    <line x1="895" y1="290" x2="895" y2="395" stroke="#334155" stroke-width="1.5" />
+
+                    <g transform="translate(895, 395)" class="cursor-pointer" onclick="inspectNode('h8')">
+                        <circle cx="0" cy="0" r="18" fill="#14142b" stroke="#6366f1" stroke-width="1.5" />
+                        <text x="0" y="4" text-anchor="middle" fill="#818cf8" font-size="10" font-weight="800">h8</text>
+                        <text x="0" y="30" text-anchor="middle" fill="#f8fafc" font-size="10">CCTV Server</text>
+                        <text x="0" y="42" text-anchor="middle" fill="#94a3b8" font-size="9" font-family="JetBrains Mono">10.0.5.1</text>
+                    </g>
+
+
+                    <!-- ZONE 6 NODES (TARGET DMZ) -->
+                    <g transform="translate(1090, 275)" class="cursor-pointer" onclick="inspectNode('s7')">
+                        <rect x="-45" y="-15" width="90" height="30" rx="8" fill="#0f172a" stroke="#f59e0b" stroke-width="2" />
+                        <text x="0" y="4" text-anchor="middle" fill="#fbbf24" font-size="11" font-weight="700">s7 (DMZ)</text>
+                    </g>
+                    <line x1="1090" y1="290" x2="1045" y2="395" stroke="#334155" stroke-width="1.5" />
+                    <line x1="1090" y1="290" x2="1135" y2="395" stroke="#334155" stroke-width="1.5" />
+
+                    <!-- TARGET SERVER h9 -->
+                    <g transform="translate(1045, 395)" class="cursor-pointer" onclick="inspectNode('h9')">
+                        <circle cx="0" cy="0" r="20" fill="#241a08" stroke="#f59e0b" stroke-width="2.5" />
+                        <text x="0" y="4" text-anchor="middle" fill="#fbbf24" font-size="11" font-weight="900">h9</text>
+                        <text x="0" y="32" text-anchor="middle" fill="#fbbf24" font-size="10" font-weight="800">Booking Server</text>
+                        <text x="0" y="44" text-anchor="middle" fill="#f59e0b" font-size="9" font-family="JetBrains Mono" font-weight="700">10.0.6.1</text>
+                    </g>
+
+                    <g transform="translate(1135, 395)" class="cursor-pointer" onclick="inspectNode('h10')">
+                        <circle cx="0" cy="0" r="18" fill="#0f172a" stroke="#f59e0b" stroke-width="1.5" />
+                        <text x="0" y="4" text-anchor="middle" fill="#fbbf24" font-size="10" font-weight="800">h10</text>
+                        <text x="0" y="30" text-anchor="middle" fill="#f8fafc" font-size="10">API Gateway</text>
+                        <text x="0" y="42" text-anchor="middle" fill="#94a3b8" font-size="9" font-family="JetBrains Mono">10.0.6.2</text>
+                    </g>
+
+                </svg>
+
+                <!-- CANVAS LAYER ON TOP FOR DYNAMIC ANIMATED PACKET FLOW PARTICLES -->
+                <canvas id="flow-canvas" width="1200" height="620" class="w-full h-full absolute inset-0 z-10 pointer-events-none"></canvas>
+
+            </div>
+
+        </div>
+
+
+        <!-- BOTTOM PANEL: HOST INSPECTOR, EXPLAINER & REAL-TIME LOGS -->
+        <div class="lg:col-span-12 grid grid-cols-1 lg:grid-cols-12 gap-5">
+            
+            <!-- Host / Node Inspector Drawer (4 Cols) -->
+            <div class="lg:col-span-4 glass-panel rounded-2xl p-4 border border-slate-800 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between pb-2.5 mb-3 border-b border-slate-800">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-microchip text-cyan-400"></i>
+                            <h3 class="font-bold text-slate-100 text-sm">Interactive Host Inspector</h3>
+                        </div>
+                        <span id="inspect-zone-badge" class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300">
+                            Click Any Host Above
+                        </span>
+                    </div>
+
+                    <div id="inspector-content" class="space-y-2.5 font-mono text-xs text-slate-300">
+                        <div class="bg-slate-900/90 rounded-xl p-3 border border-slate-800">
+                            <div class="text-[10px] text-slate-500 uppercase">SELECTED ELEMENT</div>
+                            <div id="inspect-name" class="text-sm font-bold text-emerald-400 mt-0.5">h6 (Guest / Attacker Device)</div>
+                            <div id="inspect-ip" class="text-xs text-slate-300">IP: 10.0.4.1 | MAC: 00:00:00:00:00:06</div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2 text-[11px]">
+                            <div class="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800">
+                                <span class="text-slate-500 block text-[9px]">SECURITY TIER</span>
+                                <span id="inspect-tier" class="font-bold text-rose-400">Untrusted Guest</span>
+                            </div>
+                            <div class="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800">
+                                <span class="text-slate-500 block text-[9px]">CONNECTED SWITCH</span>
+                                <span id="inspect-switch" class="font-bold text-slate-200">s5 (Port 1)</span>
+                            </div>
+                        </div>
+
+                        <div class="bg-slate-900/90 rounded-xl p-2.5 border border-slate-800">
+                            <span class="text-slate-500 block text-[9px] mb-1">ACTIVE OPENFLOW RULES</span>
+                            <div id="inspect-rules" class="text-[10px] text-emerald-400 space-y-1">
+                                <div>• Priority 10: Match ipv4_src=10.0.4.1 -> Output Port 2 (Normal)</div>
+                                <div>• Priority 50: Match ipv4_src=10.0.4.1, ipv4_dst=10.0.1.1 -> DROP</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-3 pt-2 text-[10px] text-slate-500 font-mono flex items-center justify-between border-t border-slate-800/80">
+                    <span>Click any node in topology to view stats</span>
+                    <span class="text-cyan-400">Live Inspection</span>
+                </div>
+            </div>
+
+
+            <!-- Non-Technical Reviewer Explainer & Gauges (4 Cols) -->
+            <div class="lg:col-span-4 glass-panel rounded-2xl p-4 border border-slate-800 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center gap-2 pb-2.5 mb-3 border-b border-slate-800">
+                        <i class="fa-solid fa-chalkboard-user text-emerald-400"></i>
+                        <h3 class="font-bold text-slate-100 text-sm">Non-Technical Reviewer Summary</h3>
+                    </div>
+
+                    <div id="plain-explainer" class="bg-slate-900/90 rounded-xl p-3 border border-slate-800 text-xs text-slate-300 leading-relaxed space-y-1.5">
+                        <p class="font-bold text-emerald-400 flex items-center gap-1.5">
+                            <i class="fa-solid fa-circle-check"></i> Clean Airport Network State
+                        </p>
+                        <p>
+                            • Passengers on WiFi (<code class="text-rose-300">10.0.4.1</code>) can safely use the Public Booking Website (<code class="text-amber-300">10.0.6.1</code>).
+                        </p>
+                        <p>
+                            • Flight operations (<code class="text-purple-300">10.0.1.1</code>) are strictly isolated and protected from guest access.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-2 mt-3 font-mono text-center">
+                    <div class="bg-slate-900 p-2 rounded-xl border border-slate-800">
+                        <div class="text-[9px] text-slate-500">PACKETS / SEC</div>
+                        <div id="gauge-pps" class="text-xs font-bold text-emerald-400">124 pps</div>
+                    </div>
+                    <div class="bg-slate-900 p-2 rounded-lg border border-slate-800">
+                        <div class="text-[9px] text-slate-500">BANDWIDTH</div>
+                        <div id="gauge-bps" class="text-xs font-bold text-cyan-400">98 KB/s</div>
+                    </div>
+                    <div class="bg-slate-900 p-2 rounded-lg border border-slate-800">
+                        <div class="text-[9px] text-slate-500">OPENFLOW FLOWS</div>
+                        <div id="gauge-flows" class="text-xs font-bold text-purple-400">18 Rules</div>
+                    </div>
+                </div>
+            </div>
+
+
+            <!-- Ryu Controller JSON Audit Logs (4 Cols) -->
+            <div class="lg:col-span-4 glass-panel rounded-2xl p-4 border border-slate-800 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between pb-2.5 mb-3 border-b border-slate-800">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-terminal text-purple-400"></i>
+                            <h3 class="font-bold text-slate-100 text-sm">Ryu Controller JSON Audit Feed</h3>
+                        </div>
+                        <button onclick="clearLogs()" class="text-[10px] font-mono text-slate-400 hover:text-slate-200 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                            Clear
+                        </button>
+                    </div>
+
+                    <div id="audit-log-feed" class="bg-slate-950 rounded-xl p-3 border border-slate-800/90 font-mono text-[11px] h-36 overflow-y-auto space-y-1.5">
+                        <div class="text-slate-500">[00:00:00] Ryu Controller initialized on port 6633.</div>
+                        <div class="text-purple-400">[00:00:01] ISOLATION_POLICY: Guest (10.0.4.x) -> AODB (10.0.1.x) DROP rule active.</div>
+                        <div class="text-emerald-400">[00:00:02] SWITCHES_ONLINE: 7 Open vSwitch instances connected.</div>
+                    </div>
+                </div>
+
+                <div class="mt-2 text-[10px] text-slate-500 font-mono flex items-center justify-between">
+                    <span>Protocol: OpenFlow 1.3</span>
+                    <span class="text-purple-400">REST API Ready</span>
+                </div>
+            </div>
+
+        </div>
+
+    </main>
+
+
+    <!-- FOOTER -->
+    <footer class="glass-panel border-t border-slate-800/80 px-6 py-3 text-center text-xs text-slate-500 font-mono">
+        SecureNetX - Autonomous SDN Airport Network Security System &copy; 2026
+    </footer>
+
+
+    <!-- JAVASCRIPT & PARTICLE CANVAS TRAFFIC ENGINE -->
+    <script>
+        // WEB AUDIO SYNTH GENERATOR
+        class AudioSynthEngine {
+            constructor() {
+                this.ctx = null;
+                this.muted = true;
+                this.sirenInterval = null;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+            }
+
+            playPing() {
+                if (this.muted || !this.ctx) return;
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(880, this.ctx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(440, this.ctx.currentTime + 0.1);
+                    gain.gain.setValueAtTime(0.05, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.1);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + 0.1);
+                } catch (e) {}
+            }
+
+            playDropSound() {
+                if (this.muted || !this.ctx) return;
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(300, this.ctx.currentTime);
+                    osc.frequency.linearRampToValueAtTime(60, this.ctx.currentTime + 0.25);
+                    gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.25);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + 0.25);
+                } catch (e) {}
+            }
+
+            startSiren() {
+                if (this.muted || !this.ctx || this.sirenInterval) return;
+                let toggle = false;
+                this.sirenInterval = setInterval(() => {
+                    if (this.muted || !this.ctx) return;
+                    try {
+                        const osc = this.ctx.createOscillator();
+                        const gain = this.ctx.createGain();
+                        osc.type = 'triangle';
+                        osc.frequency.setValueAtTime(toggle ? 900 : 600, this.ctx.currentTime);
+                        gain.gain.setValueAtTime(0.08, this.ctx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.2);
+                        osc.connect(gain);
+                        gain.connect(this.ctx.destination);
+                        osc.start();
+                        osc.stop(this.ctx.currentTime + 0.2);
+                        toggle = !toggle;
+                    } catch (e) {}
+                }, 220);
+            }
+
+            stopSiren() {
+                if (this.sirenInterval) {
+                    clearInterval(this.sirenInterval);
+                    this.sirenInterval = null;
+                }
+            }
+
+            playMitigateChime() {
+                if (this.muted || !this.ctx) return;
+                try {
+                    [523.25, 659.25, 783.99, 1046.50].forEach((freq, idx) => {
+                        const osc = this.ctx.createOscillator();
+                        const gain = this.ctx.createGain();
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(freq, this.ctx.currentTime + idx * 0.08);
+                        gain.gain.setValueAtTime(0.06, this.ctx.currentTime + idx * 0.08);
+                        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + idx * 0.08 + 0.3);
+                        osc.connect(gain);
+                        gain.connect(this.ctx.destination);
+                        osc.start(this.ctx.currentTime + idx * 0.08);
+                        osc.stop(this.ctx.currentTime + idx * 0.08 + 0.3);
+                    });
+                } catch (e) {}
+            }
+        }
+
+        const audioSynth = new AudioSynthEngine();
+
+        function toggleAudio() {
+            audioSynth.init();
+            audioSynth.muted = !audioSynth.muted;
+            const btn = document.getElementById('audio-mute-btn');
+            const icon = document.getElementById('audio-icon');
+            const text = document.getElementById('audio-text');
+
+            if (audioSynth.muted) {
+                icon.className = "fa-solid fa-volume-xmark text-slate-400";
+                text.innerText = "Audio: MUTED";
+                btn.className = "px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-slate-300 flex items-center gap-2 transition-all";
+                audioSynth.stopSiren();
+            } else {
+                icon.className = "fa-solid fa-volume-high text-emerald-400";
+                text.innerText = "Audio: ACTIVE";
+                btn.className = "px-3 py-1.5 rounded-xl bg-emerald-950/60 border border-emerald-500/50 text-emerald-300 flex items-center gap-2 transition-all";
+                audioSynth.playPing();
+            }
+        }
+
+
+        // GLOBAL STATE
+        const state = {
+            scenario: 'normal',
+            blockedIPs: new Set(),
+            particles: [],
+            explosions: [],
+            telemetry: { pps: 124, bps: 98, flows: 18 }
+        };
+
+        // CANVAS SETUP
+        const canvas = document.getElementById('flow-canvas');
+        const ctx = canvas.getContext('2d');
+
+        // WAYPOINT COORDINATES (1200 x 620 SPACE)
+        const waypoints = {
+            h1: { x: 65, y: 395 },
+            h2: { x: 155, y: 395 },
+            s2: { x: 110, y: 275 },
+            isolationShield: { x: 355, y: 221 },
+            s1: { x: 600, y: 167 },
+            s5: { x: 700, y: 275 },
+            h6: { x: 655, y: 395 },
+            h7: { x: 745, y: 395 },
+            s7: { x: 1090, y: 275 },
+            h9: { x: 1045, y: 395 }
+        };
+
+        // TRAFFIC PATH DEFINITIONS
+        const paths = {
+            normal: [waypoints.h6, waypoints.s5, waypoints.s1, waypoints.s7, waypoints.h9],
+            isolation: [waypoints.h6, waypoints.s5, waypoints.s1, waypoints.isolationShield],
+            attack: [waypoints.h6, waypoints.s5, waypoints.s1, waypoints.s7, waypoints.h9]
+        };
+
+        // PARTICLE CLASS
+        class FlowParticle {
+            constructor(path, speed, color, radius, type) {
+                this.path = path;
+                this.segment = 0;
+                this.progress = 0;
+                this.speed = speed;
+                this.color = color;
+                this.radius = radius;
+                this.type = type;
+                this.x = path[0].x;
+                this.y = path[0].y;
+            }
+
+            update() {
+                if (this.segment >= this.path.length - 1) return false;
+
+                const start = this.path[this.segment];
+                const end = this.path[this.segment + 1];
+
+                this.progress += this.speed;
+
+                if (this.progress >= 1) {
+                    this.progress = 0;
+                    this.segment++;
+
+                    if (this.segment >= this.path.length - 1) {
+                        if (this.type === 'isolation_test') {
+                            // Trigger Denial Explosion at Shield
+                            createExplosion(waypoints.isolationShield.x, waypoints.isolationShield.y, '#f43f5e');
+                            logAudit('POLICY_DROP: Packet from 10.0.4.1 to 10.0.1.1 DENIED at SDN Shield!', 'error');
+                            audioSynth.playDropSound();
+                        } else if (this.type === 'normal') {
+                            audioSynth.playPing();
+                        }
+                        return false; // Particle dies
+                    }
+                }
+
+                const currentStart = this.path[this.segment];
+                const currentEnd = this.path[this.segment + 1];
+
+                this.x = currentStart.x + (currentEnd.x - currentStart.x) * this.progress;
+                this.y = currentStart.y + (currentEnd.y - currentStart.y) * this.progress;
+
+                return true;
+            }
+
+            draw(ctx) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.shadowColor = this.color;
+                ctx.shadowBlur = 10;
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        // EXPLOSION / SHIELD IMPACT EFFECT
+        function createExplosion(x, y, color) {
+            state.explosions.push({
+                x, y, color,
+                radius: 5,
+                maxRadius: 35,
+                alpha: 1
+            });
+        }
+
+        // ANIMATION LOOP
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Spawn Particles Based on Scenario
+            if (state.scenario === 'normal' && Math.random() < 0.08) {
+                state.particles.push(new FlowParticle(paths.normal, 0.015, '#10b981', 4, 'normal'));
+            } else if (state.scenario === 'isolation' && Math.random() < 0.05) {
+                state.particles.push(new FlowParticle(paths.isolation, 0.012, '#f59e0b', 5, 'isolation_test'));
+            } else if (state.scenario === 'suspicious' && Math.random() < 0.2) {
+                state.particles.push(new FlowParticle(paths.normal, 0.02, '#f59e0b', 5, 'suspicious'));
+            } else if (state.scenario === 'attack' && !state.blockedIPs.has('10.0.4.1')) {
+                for (let i = 0; i < 4; i++) { // Dense flood
+                    state.particles.push(new FlowParticle(paths.attack, 0.035 + Math.random() * 0.01, '#f43f5e', 4.5, 'attack'));
+                }
+            }
+
+            // Update & Render Particles
+            state.particles = state.particles.filter(p => {
+                const alive = p.update();
+                if (alive) p.draw(ctx);
+                return alive;
+            });
+
+            // Render Explosions
+            state.explosions = state.explosions.filter(exp => {
+                exp.radius += 1.5;
+                exp.alpha -= 0.04;
+
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(exp.x, exp.y, exp.radius, 0, Math.PI * 2);
+                ctx.strokeStyle = exp.color;
+                ctx.lineWidth = 2.5;
+                ctx.globalAlpha = Math.max(0, exp.alpha);
+                ctx.stroke();
+
+                // Draw X in center
+                ctx.fillStyle = exp.color;
+                ctx.font = 'bold 16px Inter';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('✕ DENIED', exp.x, exp.y);
+
+                ctx.restore();
+
+                return exp.alpha > 0;
+            });
+
+            requestAnimationFrame(animate);
+        }
+
+
+        // SCENARIO CONTROLLER
+        function setScenario(type) {
+            state.scenario = type;
+
+            const banner = document.getElementById('alarm-banner');
+            const iconBox = document.getElementById('alarm-icon-box');
+            const title = document.getElementById('alarm-title');
+            const badge = document.getElementById('alarm-badge');
+            const desc = document.getElementById('alarm-desc');
+            const pps = document.getElementById('banner-pps');
+            const threat = document.getElementById('banner-threat');
+
+            audioSynth.stopSiren();
+
+            if (type === 'normal') {
+                banner.className = "lg:col-span-12 glass-panel rounded-2xl p-4 border border-emerald-500/40 bg-emerald-950/10 transition-all duration-300 flex flex-col md:flex-row items-center justify-between gap-4";
+                iconBox.className = "h-12 w-12 rounded-xl bg-emerald-500/20 border border-emerald-500/50 flex items-center justify-center text-emerald-400 text-2xl shrink-0";
+                iconBox.innerHTML = '<i class="fa-solid fa-circle-check"></i>';
+                title.innerText = "SYSTEM STATUS: NORMAL OPERATION";
+                badge.innerText = "Clean Traffic";
+                badge.className = "text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 uppercase";
+                desc.innerHTML = 'Network telemetry is clean. Guest WiFi users (<code class="text-rose-300">10.0.4.1</code>) access Public DMZ web servers normally, while critical AODB databases (<code class="text-purple-300">10.0.1.1</code>) remain fully isolated.';
+                pps.innerText = "124 pps";
+                pps.className = "text-base font-bold text-emerald-400";
+                threat.innerText = "LOW (0%)";
+                threat.className = "text-base font-bold text-emerald-400";
+
+                logAudit("SCENARIO_SET: Normal Traffic Mode activated.", "success");
+
+            } else if (type === 'isolation') {
+                banner.className = "lg:col-span-12 glass-panel rounded-2xl p-4 border border-purple-500/40 bg-purple-950/10 transition-all duration-300 flex flex-col md:flex-row items-center justify-between gap-4";
+                iconBox.className = "h-12 w-12 rounded-xl bg-purple-500/20 border border-purple-500/50 flex items-center justify-center text-purple-400 text-2xl shrink-0";
+                iconBox.innerHTML = '<i class="fa-solid fa-shield-cat"></i>';
+                title.innerText = "SECURITY TEST: GUEST ➔ AODB ISOLATION POLICY";
+                badge.innerText = "Isolation Active";
+                badge.className = "text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40 uppercase";
+                desc.innerHTML = 'Testing SDN isolation policy. Guest Laptop (<code class="text-rose-300">10.0.4.1</code>) sends ping requests to AODB Server (<code class="text-purple-300">10.0.1.1</code>). Watch the orange packets hit the <b>SDN Shield Barrier</b> and dissolve with 100% loss!';
+                pps.innerText = "140 pps";
+                pps.className = "text-base font-bold text-purple-400";
+                threat.innerText = "PROTECTED";
+                threat.className = "text-base font-bold text-purple-400";
+
+                logAudit("ISOLATION_TEST: Guest 10.0.4.1 -> AODB 10.0.1.1 ping test initiated.", "purple");
+
+            } else if (type === 'suspicious') {
+                banner.className = "lg:col-span-12 glass-panel rounded-2xl p-4 border border-amber-500/60 bg-amber-950/20 warning-pulse-active transition-all duration-300 flex flex-col md:flex-row items-center justify-between gap-4";
+                iconBox.className = "h-12 w-12 rounded-xl bg-amber-500/20 border border-amber-500/50 flex items-center justify-center text-amber-400 text-2xl shrink-0";
+                iconBox.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i>';
+                title.innerText = "WARNING: SUSPICIOUS TRAFFIC RATE SPIKE DETECTED";
+                badge.innerText = "AI Evaluating";
+                badge.className = "text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 uppercase";
+                desc.innerHTML = 'Anomalous packet frequency originating from Guest <code class="text-rose-300">10.0.4.1</code>. The AI XGBoost/LightGBM Model is evaluating packet rates and flow durations for DDoS signature patterns...';
+                pps.innerText = "3,450 pps";
+                pps.className = "text-base font-bold text-amber-400";
+                threat.innerText = "ELEVATED (45%)";
+                threat.className = "text-base font-bold text-amber-400";
+
+                logAudit("ANOMALY_WARNING: Packet rate spike from 10.0.4.1. Passing telemetry payload to AI model...", "warn");
+
+            } else if (type === 'attack') {
+                if (state.blockedIPs.has('10.0.4.1')) {
+                    logAudit("ATTACK_ATTEMPT_BLOCKED: Host 10.0.4.1 is currently blocked by OpenFlow drop rule.", "warn");
+                    return;
+                }
+
+                banner.className = "lg:col-span-12 glass-panel rounded-2xl p-4 alarm-strobe-active transition-all duration-300 flex flex-col md:flex-row items-center justify-between gap-4";
+                iconBox.className = "h-12 w-12 rounded-xl bg-rose-500/30 border border-rose-500/70 flex items-center justify-center text-rose-300 text-2xl shrink-0 animate-bounce";
+                iconBox.innerHTML = '<i class="fa-solid fa-skull-crossbones"></i>';
+                title.innerText = "CRITICAL ALERT: SYN-FLOOD DoS ATTACK IN PROGRESS!";
+                badge.innerText = "CRITICAL THREAT";
+                badge.className = "text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-rose-500 text-white border border-rose-300 uppercase animate-pulse";
+                desc.innerHTML = 'Attacker <code class="text-rose-300">10.0.4.1</code> is flooding the Public Booking Web Server (<code class="text-amber-300">10.0.6.1</code>) with over 15,000 SYN packets/sec! Click <b>"🛡️ AI Auto-Block"</b> to trigger automated mitigation.';
+                pps.innerText = "15,820 pps";
+                pps.className = "text-base font-bold text-rose-400 animate-pulse";
+                threat.innerText = "CRITICAL (98%)";
+                threat.className = "text-base font-bold text-rose-400 animate-pulse";
+
+                audioSynth.startSiren();
+                logAudit("CRITICAL_ALARM: SYN-Flood DoS Attack detected from 10.0.4.1 -> 10.0.6.1!", "error");
+
+            } else if (type === 'mitigate') {
+                state.blockedIPs.add('10.0.4.1');
+
+                banner.className = "lg:col-span-12 glass-panel rounded-2xl p-4 border border-cyan-500/50 bg-cyan-950/20 transition-all duration-300 flex flex-col md:flex-row items-center justify-between gap-4";
+                iconBox.className = "h-12 w-12 rounded-xl bg-cyan-500/20 border border-cyan-500/50 flex items-center justify-center text-cyan-400 text-2xl shrink-0";
+                iconBox.innerHTML = '<i class="fa-solid fa-robot"></i>';
+                title.innerText = "AUTONOMOUS AI MITIGATION: ATTACKER 10.0.4.1 ISOLATED";
+                badge.innerText = "Attack Mitigated";
+                badge.className = "text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 uppercase";
+                desc.innerHTML = 'AI Classifier identified DDoS signature. Dispatched REST payload to Ryu Controller: <code class="text-cyan-300">POST /firewall/block {"ip":"10.0.4.1"}</code>. Priority 100 Drop rule installed. Attacker isolated completely!';
+                pps.innerText = "12 pps";
+                pps.className = "text-base font-bold text-cyan-400";
+                threat.innerText = "NEUTRALIZED";
+                threat.className = "text-base font-bold text-cyan-400";
+
+                audioSynth.playMitigateChime();
+                logAudit("AI_MITIGATION: Dynamic OpenFlow Drop Rule installed for src_ip=10.0.4.1 [Priority 100]", "success");
+
+                // Update Attacker Node Graphics
+                document.getElementById('h6-circle').setAttribute('stroke', '#64748b');
+                document.getElementById('h6-label-title').innerText = "BLOCKED BY AI";
+            }
+        }
+
+        // RESET SYSTEM
+        function resetSystemState() {
+            state.blockedIPs.clear();
+            document.getElementById('h6-circle').setAttribute('stroke', '#f43f5e');
+            document.getElementById('h6-label-title').innerText = "Guest / Attacker";
+            setScenario('normal');
+            logAudit("SYSTEM_RESET: Flow tables restored. Dynamic blocks cleared.", "success");
+        }
+
+        // AUDIT LOG UTILITY
+        function logAudit(message, type = "info") {
+            const feed = document.getElementById('audit-log-feed');
+            const time = new Date().toISOString().substr(11, 8);
+            const entry = document.createElement('div');
+
+            let colorClass = "text-slate-300";
+            if (type === "success") colorClass = "text-emerald-400";
+            if (type === "warn") colorClass = "text-amber-400 font-bold";
+            if (type === "error") colorClass = "text-rose-400 font-bold";
+            if (type === "purple") colorClass = "text-purple-400";
+
+            entry.className = colorClass;
+            entry.innerText = `[${time}] ${message}`;
+            feed.appendChild(entry);
+            feed.scrollTop = feed.scrollHeight;
+        }
+
+        function clearLogs() {
+            document.getElementById('audit-log-feed').innerHTML = '';
+        }
+
+        // HOST INSPECTION DRAWER
+        function inspectNode(nodeKey) {
+            const nodeData = {
+                ryu: { name: "Ryu SDN Controller", ip: "127.0.0.1", mac: "N/A (Central Brain)", tier: "Management", switch: "N/A", rules: ["• REST API Endpoint: :8080", "• OpenFlow Protocol: v1.3 Master", "• Auto-Mitigation Engine: Enabled"] },
+                s1: { name: "Core Switch (s1)", ip: "10.0.0.254", mac: "00:00:00:00:00:01", tier: "Backbone", switch: "Core Switch", rules: ["• Flow Table 0: Default Lookup", "• Isolation Rule: Priority 50 Drop", "• Port 1-6 Trunking Active"] },
+                h1: { name: "h1 (AODB Primary Server)", ip: "10.0.1.1", mac: "00:00:00:00:00:01", tier: "Critical AODB", switch: "s2 (Port 1)", rules: ["• Priority 50: Drop from 10.0.4.x", "• Priority 10: Allow Internal 10.0.1.x"] },
+                h6: { name: "h6 (Guest / Attacker Laptop)", ip: "10.0.4.1", mac: "00:00:00:00:00:06", tier: "Untrusted Guest WiFi", switch: "s5 (Port 1)", rules: ["• Priority 10: Allow to DMZ (10.0.6.x)", "• Priority 50: Block to AODB (10.0.1.x)", "• Priority 100: AI Dynamic Block Rule"] },
+                h9: { name: "h9 (Public Booking Web Server)", ip: "10.0.6.1", mac: "00:00:00:00:00:09", tier: "Public DMZ", switch: "s7 (Port 1)", rules: ["• Priority 10: Allow HTTP/HTTPS", "• Rate Monitoring: Active"] }
+            };
+
+            const data = nodeData[nodeKey] || { name: `${nodeKey.toUpperCase()} Node`, ip: "10.0.x.x", mac: "00:00:00:00:00:XX", tier: "Standard Node", switch: "Edge Switch", rules: ["• Default OpenFlow Rule"] };
+
+            document.getElementById('inspect-name').innerText = data.name;
+            document.getElementById('inspect-ip').innerText = `IP: ${data.ip} | MAC: ${data.mac}`;
+            document.getElementById('inspect-tier').innerText = data.tier;
+            document.getElementById('inspect-switch').innerText = data.switch;
+
+            const rulesBox = document.getElementById('inspect-rules');
+            rulesBox.innerHTML = data.rules.map(r => `<div>${r}</div>`).join('');
+
+            logAudit(`INSPECTOR: Selected ${data.name} for telemetry lookup.`, "info");
+        }
+
+        // REAL-TIME CLOCK & TELEMETRY GAUGES
+        setInterval(() => {
+            const now = new Date();
+            document.getElementById('live-clock').innerText = now.toUTCString().split(' ')[4] + ' UTC';
+
+            let pps = 124, bps = 98, flows = 18;
+            if (state.scenario === 'attack' && !state.blockedIPs.has('10.0.4.1')) {
+                pps = Math.floor(15000 + Math.random() * 2000);
+                bps = Math.floor(9200 + Math.random() * 1000);
+            } else if (state.scenario === 'suspicious') {
+                pps = Math.floor(3400 + Math.random() * 400);
+                bps = Math.floor(2100 + Math.random() * 300);
+            } else if (state.blockedIPs.has('10.0.4.1')) {
+                pps = 12; bps = 8; flows = 19;
+            } else {
+                pps = Math.floor(110 + Math.random() * 30);
+                bps = Math.floor(80 + Math.random() * 20);
+            }
+
+            document.getElementById('gauge-pps').innerText = pps.toLocaleString() + ' pps';
+            document.getElementById('gauge-bps').innerText = bps > 1024 ? (bps / 1024).toFixed(1) + ' MB/s' : bps + ' KB/s';
+            document.getElementById('gauge-flows').innerText = flows + ' Rules';
+        }, 800);
+
+        // INITIALIZE ON LOAD
+        window.onload = () => {
+            animate();
+            logAudit("SecureNetX SOC Traffic Visualizer Ready.", "success");
+        };
+    </script>
+</body>
+</html>
